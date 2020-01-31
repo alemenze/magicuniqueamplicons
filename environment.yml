@@ -9,3 +9,5 @@ dependencies:
   - bioconda::pandaseq=2.8.1
   - conda-forge::r-markdown=1.1
   - conda-forge::r-base=3.6.1
+  - cutadapt=2.6
+  - python=3.6.7

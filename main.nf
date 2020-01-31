@@ -30,14 +30,44 @@ process fastqc {
     """
 }
 
+ if (params.FW_primer && params.RV_primer){
 /*
- * STEP 2 - Panda Pairing
+ * STEP 2 - Trimming
+ */
+ process trimming{
+     publishDir "${params.outdir}/trimmed", mode:'copy',
+     saveAs 
+
+     input set val(pair_id), file(reads) from read_files_trimming
+
+     output:
+     set val(name), file "trimmed/*.*" into (ch_fastq_trimmed)
+
+     script:
+     """
+     mkdir -p trimmed
+     cutadapt --pair-filter=any --discard-untrimmed -g ${params.FW_primer} -G ${params.RV_primer} -o trimmed/$folder${params.split}${reads[0]} -p trimmed/$folder${params.split}${reads[1]} ${reads[0]} ${reads[2]} > cutadapt_log_${pair_id}.txt
+     """
+ }
+ }
+ else {
+     println "No Trimming performed"
+ }
+
+/*
+ * STEP 3 - Panda Pairing
  */
  process panda_pair {
     publishDir "${params.outdir}/pairs", mode: 'copy'
 
     input:
-    set val(name), file(reads) from read_files_trimming
+    
+    if (params.FW_primer && params.RV_primer){
+        set val(name), file(reads) from ch_fastq_trimmed
+    }
+    else {
+        set val(name), file(reads) from read_files_trimming
+    }
 
     output:
     set val(name),file("*_paired.fastq") into panda_results
@@ -51,7 +81,7 @@ process fastqc {
  }
 
  /*
- * STEP 3 - Unique Counting
+ * STEP 4 - Unique Counting
  */
   process unique_count {
      publishDir "${params.outdir}/txts", mode: 'copy'
