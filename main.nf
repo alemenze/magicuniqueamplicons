@@ -35,20 +35,24 @@ process fastqc {
  * STEP 2 - Trimming
  */
  process trimming{
-     publishDir "${params.outdir}/trimmed", mode:'copy',
-     saveAs 
+     tag "$name"
+     publishDir "${params.outdir}/trimmed", mode:'copy'
 
-     input set val(pair_id), file(reads) from read_files_trimming
+     input:
+     set val(name), file(reads) from read_files_trimming
 
      output:
-     set val(name), file "trimmed/*.*" into (ch_fastq_trimmed)
+     set val(name), file("trimmed/*.*") into ch_fastq_trimmed
 
      script:
      """
      mkdir -p trimmed
-     cutadapt --pair-filter=any --discard-untrimmed -g ${params.FW_primer} -G ${params.RV_primer} -o trimmed/$folder${params.split}${reads[0]} -p trimmed/$folder${params.split}${reads[1]} ${reads[0]} ${reads[2]} > cutadapt_log_${pair_id}.txt
+     cutadapt --pair-filter=any --discard-untrimmed \
+     -g ${params.FW_primer} -G ${params.RV_primer} \
+     -o trimmed/${reads[0]} -p trimmed/${reads[1]} \
+     ${reads[0]} ${reads[1]} > cutadapt_log_${name}.txt
      """
- }
+    }
  }
  else {
      println "No Trimming performed"
@@ -57,35 +61,46 @@ process fastqc {
 /*
  * STEP 3 - Panda Pairing
  */
- process panda_pair {
+
+if (params.FW_primer && params.RV_primer){
+ process panda_pair_trimmed {
     publishDir "${params.outdir}/pairs", mode: 'copy'
-
+    tag "$name"
     input:
+    set val(name), file(reads) from ch_fastq_trimmed
     
-    if (params.FW_primer && params.RV_primer){
-        set val(name), file(reads) from ch_fastq_trimmed
-    }
-    else {
-        set val(name), file(reads) from read_files_trimming
-    }
-
     output:
     set val(name),file("*_paired.fastq") into panda_results
     
-
     script:
     """
     pandaseq -f ${reads[0]} -r ${reads[1]} -w ${name}_paired.fastq
     """
-
+    }
  }
+ else {
+    process panda_pair_untrimmed {
+    publishDir "${params.outdir}/pairs", mode: 'copy'
+    tag "$name"
+    input:
+    set val(name), file(reads) from read_files_trimming
+    
+    output:
+    set val(name),file("*_paired.fastq") into panda_results
+    
+    script:
+    """
+    pandaseq -f ${reads[0]} -r ${reads[1]} -w ${name}_paired.fastq
+    """
+    }
+}
 
  /*
  * STEP 4 - Unique Counting
  */
   process unique_count {
      publishDir "${params.outdir}/txts", mode: 'copy'
-
+    tag "$name"
     input:
     set val(name), file(reads) from panda_results
 
@@ -99,11 +114,11 @@ process fastqc {
  }
  
 /*
- * STEP 4 - CSV conversion
+ * STEP 5 - CSV conversion
  */
  process csv_convert {
      publishDir "${params.outdir}/output", mode: 'copy'
-
+tag "$name"
     input:
     set val(name), file(counts) from count_results
 
